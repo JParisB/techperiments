@@ -1,0 +1,395 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Paint Tool 2016. Because... why not?</title>
+<script type="text/javascript" src="js/knockout-3.4.1.js"></script>
+<script type="text/javascript" src="js/tools.js"></script>
+<script type="text/javascript" src="js/brushes.js"></script>
+<script src="js/jquery-1.10.2.js"></script>
+<script src="js/jquery-ui.js"></script>
+<script>
+window.addEventListener('load', init, false);
+
+var isMousePressed = false;
+var globalX;
+var globalY;
+var lastPoint;
+var arrayofPoints = new Array();
+var x = 764;
+var y = 560;
+var counter = 0;
+var ctx;
+var initCanvasNumber = 3;
+var selectedLayer = 0;
+var eraserEnabled = false;
+
+var BB = new Array();
+var canvas = new Array();
+
+var viewModel;
+
+var currentDrawStyle = {
+	beginToDrawOnFirstClick: false,
+	putShadow: false,
+	LineColor: "#000000",
+	ShadowColor: "#666666",
+	pencilWidth: 5,
+	shadowWidth: 5,
+	shwdowOffset: 5,
+	pixelSeparation : 1,
+	pixelTolerance : 10
+}
+
+function setCurrentLayer(layer) {
+	ctx = canvas[layer].getContext("2d");
+}
+	
+function init() {
+	// Initialize Canvas
+	for (nc = 0; nc < initCanvasNumber; nc++) {
+		canvas[nc] = document.getElementById("myCanvas" + nc);
+		if (nc == 0) {setCurrentLayer(0);}
+		
+		BB[nc] = canvas[nc].getBoundingClientRect();
+		
+		canvas[nc].onmousedown = function(e) {
+			isMousePressed = true;
+			document.getElementById("status").innerHTML = "-mousedown-  -begindraw[" + currentDrawStyle.beginToDrawOnFirstClick + "]-";
+			
+			//globalX = e.clientX - canvas.offsetLeft;
+			//globalY = e.clientY - canvas.offsetTop;
+	
+			globalX = e.clientX - BB[selectedLayer].left;
+			globalY = e.clientY - BB[selectedLayer].top;
+					
+			ctx.beginPath();
+			//ctx.moveTo(globalX, globalY);
+			
+			lastPoint = { x: (globalX * 1), y: (globalY * 1) };
+			
+			arrayofPoints = new Array();
+			arrayofPoints.push({x:(globalX * 1),y:(globalY * 1)});
+			counter = 1;
+			
+			if (currentDrawStyle.beginToDrawOnFirstClick) {draw(ctx);}
+		}
+		
+		canvas[nc].onmouseup = function(e) {
+			// document.getElementById("status").innerHTML = "";
+			isMousePressed = false;
+			
+		}
+		
+		canvas[nc].onmousemove  = function(e) {
+			if (isMousePressed) {
+				//globalX = e.clientX - canvas.offsetLeft;
+				//globalY = e.clientY - canvas.offsetTop;
+				globalX = e.clientX - BB[selectedLayer].left;
+				globalY = e.clientY - BB[selectedLayer].top;
+		
+				draw(ctx);	
+			} else {
+				// document.getElementById("coords").innerHTML = "(" + (e.clientX + " - " + BB[selectedLayer].left) + "," + (e.clientY + " - " + BB[selectedLayer].top) + ")";
+			}
+		}
+	}
+	// Init other sections
+	$( "#pencilWidth" ).spinner({ min: 1, max: 200 }).val(5);
+	$( "#pencilWidth" ).on( "spinchange", function( event, ui ) {
+		globalSetter('pencilWidth', $( "#pencilWidth" ).spinner( "value" ));
+	} );
+	
+	$( "#shadowWidth" ).spinner({ min: 1, max: 200 }).val(5);
+	$( "#shadowWidth" ).on( "spinchange", function( event, ui ) {
+		globalSetter('shadowWidth', $( "#shadowWidth" ).spinner( "value" ));
+	} );	
+	$( "#shwdowOffset" ).spinner({ min: 1, max: 200 }).val(5);
+	$( "#shwdowOffset" ).on( "spinchange", function( event, ui ) {
+		globalSetter('shwdowOffset', $( "#shwdowOffset" ).spinner( "value" ));
+	} );	
+
+    $( "#pixelslider" ).slider();
+	$( "#pixelslider" ).slider( "option", "min", 0 );
+	$( "#pixelslider" ).slider( "option", "max", 50 );
+	$( "#pixelslider" ).on( "slide", function( event, ui ) {
+		var pixelSeparation = $( "#pixelslider" ).slider( "option", "value" );
+		document.getElementById("pixelSeparation").value = pixelSeparation;
+		globalSetter('pixelSeparation',pixelSeparation);
+	} );
+	
+    $( "#pixelslidertolerance" ).slider();
+	$( "#pixelslidertolerance" ).slider( "option", "min", 0 );
+	$( "#pixelslidertolerance" ).slider( "option", "max", 50 );
+	$( "#pixelslidertolerance" ).on( "slide", function( event, ui ) {
+		var pixelTolerance = $( "#pixelslidertolerance" ).slider( "option", "value" );
+		document.getElementById("pixelTolerance").value = pixelTolerance;
+		globalSetter('pixelTolerance',pixelTolerance);
+	} );
+
+	// Knockout first experiment:
+	
+    viewModel = {
+        selectedPencil : ko.observable("Neighbor")
+    };
+	
+	ko.applyBindings(viewModel);	
+	
+	initPalette();
+}
+
+function initPalette() {
+	selectedPalette = document.getElementById("selectedPalette").value;
+	if ((selectedPalette == undefined) || (selectedPalette == "")) {selectedPalette = "standard";}
+	document.getElementById("pencilPalette").innerHTML = getPalette("LineColor",selectedPalette,"pencilPalette");
+	document.getElementById("shadowPalette").innerHTML = getPalette("ShadowColor",selectedPalette,"shadowPalette");
+	setPencil("Neighbor",1);
+}
+
+function setPencil(pencil,beginToDrawOnFirstClick) {
+	viewModel.selectedPencil(pencil); // KO observables are functions
+	beginToDrawOnFirstClick == 1 ? currentDrawStyle.beginToDrawOnFirstClick = true : currentDrawStyle.beginToDrawOnFirstClick = false;
+}
+
+function draw(context) {
+	//selectedPencil = document.getElementById("pencil").value;
+	if (viewModel.selectedPencil() == "") {
+		return;	
+	}
+	// document.getElementById("status").innerHTML = currentDrawStyle.putShadow;
+	if ((currentDrawStyle.putShadow) || (document.getElementById("shadow").checked)) {setShadow(context);} else {
+		// Temporal Fix to Disable Shadow Once it was enabled
+		context.shadowOffsetX = 0;
+		context.shadowOffsetY = 0;
+		context.shadowBlur = 0;			
+	}
+	
+	myPencils[viewModel.selectedPencil()](context);
+}
+
+// Special Effects - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+function setShadow(context) {
+	context.shadowOffsetX = currentDrawStyle.shwdowOffset;
+	context.shadowOffsetY = currentDrawStyle.shwdowOffset;
+	context.shadowBlur = currentDrawStyle.shadowWidth;
+	context.shadowColor = currentDrawStyle.ShadowColor;	
+}
+
+function setShadowState() {
+	shadow = document.getElementById("shadow").checked;
+	shadow ? currentDrawStyle.putShadow = true : currentDrawStyle.putShadow = false;
+}
+
+// Inner HTML - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+function readBrushCombo(value) 
+{
+	value = value.split(",");
+	setPencil(value[0],value[1]);
+}
+function openPincelPalette() {
+	$( "#pencilPalette" ).dialog({
+		hide: { effect: "fadeOut", duration: 500 },
+		closeOnEscape: true,
+		maxHeight: 750,
+		maxWidth: 1024,
+		height: 480,
+		width: 640,
+		modal: true,
+		my: "left top",
+		at: "left top",
+		of: "#targetElement",
+		title: "Choose your color"
+	});
+}
+function openshadowPalette() {
+	$( "#shadowPalette" ).dialog({
+		hide: { effect: "fadeOut", duration: 500 },
+		closeOnEscape: true,
+		maxHeight: 750,
+		maxWidth: 1024,
+		height: 480,
+		width: 640,
+		modal: true,
+		my: "left top",
+		at: "left top",
+		of: "#targetElement",
+		title: "Choose your shadow color"
+	});
+}
+function setEraser() {
+	checked = document.getElementById("eraser").checked;
+	if (checked) {eraserEnabled = true;} else {eraserEnabled = false; ctx.globalCompositeOperation = "source-over";}
+	// Set to source-over because I do not why. If I dont put that, I cant restore to normal drawing after seting the eraser
+	document.getElementById("status").innerHTML = eraserEnabled;
+}
+// Layer Management - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+function setLayer(layer) {
+	selectedLayer = layer;
+	setCurrentLayer(layer);
+	for (nc = 0; nc < initCanvasNumber; nc++) {
+		if (nc != layer) {
+			document.getElementById("myCanvas" + nc).style.display = "none";
+		}
+	}
+	document.getElementById("myCanvas" + layer).style.display = "block";
+	
+	document.getElementById("eraser").checked = false;
+	setEraser();
+}
+function test() {
+	// ctx.clearRect(0, 0, 300, 300);	
+	for (nc = 0; nc < initCanvasNumber; nc++) {
+		document.getElementById("myCanvas" + nc).style.display = "block";
+	}	
+}
+</script>
+<link href="css/formatbody.css" rel="stylesheet" type="text/css">
+<link rel="stylesheet" href="css/jquery-ui.css">
+<style type="text/css">
+body {
+	background-color: #3c3c3c;
+}
+</style>
+</head>
+
+<body>
+<table width="99%" height="100%" border="0" align="center" cellpadding="1" cellspacing="1" bgcolor="#CCCCCC">
+  <tr>
+    <td height="50" colspan="3" bgcolor="#985E6D"><table width="100%" border="0" cellspacing="0" cellpadding="0">
+      <tr>
+        <td width="75" align="center"><img src="images/sponge.png" width="66" height="45"></td>
+        <td width="200"><strong><span class="normalText">Type:</span></strong>
+        <!--input name="pencil" type="hidden" value="" id="pencil"-->
+        <select name="select" size="1" id="mybrushes" onChange="readBrushCombo(this.value);">
+		  <option value="Neighbor,1">Neighbor</option>
+          <option value="Point,1">Points</option>
+          <option value="Line,0">Line</option>
+          <option value="Fur,1">Furry</option>
+          <option value="Flakes,0">Flakes</option>
+          <option value="Circles,1">Random Circles</option>
+          <option value="Brushstroke,1">Brush Strokes</option>
+          <option value="MagicBrush,0">Random Triangles</option>
+          <option value="BigPixel,1">Pixel Art</option>
+          
+        </select>
+</td>
+        <td width="200"><strong><span class="normalText">Palette:</span></strong>
+        <select name="selectedPalette" id="selectedPalette" onChange="initPalette()">
+          <option value="standard">Flat Design</option>
+		  <option value="material">Material Design</option>
+          <option value="c64colors">c64</option>
+        </select>
+        </td>
+        <td>
+        <input name="Shadow" type="checkbox" id="shadow" onClick="setShadowState()" value="1" checked> 
+        <strong><span class="normalText">Shadow</span></strong>
+        </td>
+        <td>&nbsp;</td>
+      </tr>
+    </table></td>
+  </tr>
+  <tr>
+    <td width="150" align="center" valign="top" bgcolor="#494E6B"><table width="100%" border="0" cellspacing="0" cellpadding="0">
+      <tr>
+        <td height="50" valign="top" bgcolor="#98878F"><table border="0" cellpadding="0" cellspacing="0" class="innerTable">
+          <tr>
+            <td width="73" height="50" bgcolor="#000000" onClick="openPincelPalette();" id="refLineColor">&nbsp;</td>
+            <td width="73" height="50" bgcolor="#666666" onClick="openshadowPalette();" id="refShadowColor">&nbsp;</td>
+          </tr>
+        </table></td>
+      </tr>
+      <tr>
+        <td valign="top"><table border="0" cellpadding="1" cellspacing="1" class="innerTable">
+          <tr>
+            <td width="120" class="tinyText">Pencil:</td>
+            <td><label for="pencilWidth"></label>
+              <input name="pencilWidth" style="width:30px; height:15px; font-size:12px;" type="text" id="pencilWidth" value="5" size="2" maxlength="2" onChange="globalSetter('pencilWidth',this.value);" onClick="this.select();"></td>
+          </tr>
+          <tr>
+            <td class="tinyText">Shadow:</td>
+            <td><label for="pencilWidth"></label>
+              <input name="pencilWidth" style="width:30px; height:15px; font-size:12px;" type="text" id="shadowWidth" value="5" size="2" maxlength="2" onChange="globalSetter('shadowWidth',this.value);" onClick="this.select();"></td>
+          </tr>
+          <tr>
+            <td class="tinyText">OffSet:</td>
+            <td><label for="pencilWidth"></label>
+              <input name="pencilWidth" style="width:30px; height:15px; font-size:12px;" type="text" id="shwdowOffset" value="5" size="2" maxlength="2" onChange="globalSetter('shwdowOffset',this.value);" onClick="this.select();"></td>
+          </tr>
+        </table></td>
+      </tr>
+      <tr>
+        <td valign="top"><table width="100%" border="0" cellpadding="0" cellspacing="0" class="innerTable">
+          <tr>
+            <td align="left"><select name="select2" size="1" id="select" onChange="setLayer(this.value);">
+              <option value="0">Layer 1</option>
+              <option value="1">Layer 2</option>
+              <option value="2">Layer 3</option>
+            </select></td>
+            <td align="left"><input type="button" name="button" id="button" value="SHOW ALL" onClick="test();"></td>
+          </tr>
+          <tr>
+            <td colspan="2" align="left"><input name="eraser" type="checkbox" id="eraser" value="1" onClick="setEraser()">
+              <label for="eraser" class="tinyText">ERASER</label></td>
+            </tr>
+        </table></td>
+      </tr>
+    </table></td>
+    <td width="950" valign="top" bgcolor="#FFFFFF">
+    <canvas id="myCanvas0" style="border: 1px solid; color:#ffffff; position: absolute; left: 152; top: 52; z-index: 2;" width="950" height="563"></canvas>
+    <canvas id="myCanvas1" style="border: 1px solid; color:#ffffff; position: absolute; left: 152; top: 52; z-index: 1;" width="950" height="563"></canvas>
+	<canvas id="myCanvas2" style="border: 1px solid; color:#ffffff; position: absolute; left: 152; top: 52; z-index: 0;" width="950" height="563"></canvas>    
+    </td>
+    <td valign="top" bgcolor="#3c3c3c"><table width="100%" border="0" class="innerTable">
+      <tr>
+        <td><span class="normalText">Experimental Paint Tool - Paris 2016</span></td>
+      </tr>
+      <tr>
+        <td align="center">
+        <div id="coords"></div>
+        <div id="customConstrols1" style="display:none"></div>
+		
+		<div data-bind="visible: viewModel.selectedPencil() == 'BigPixel'">
+		<br>
+        <table width="80%" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td><span class="tinyText">Pixel Separation:</span></td>
+            <td><input name="pixelSeparation" type="text" id="pixelSeparation" value="1" size="2" maxlength="2" onChange="globalSetter('pixelSeparation',this.value);" onClick="this.select();"></td>
+          </tr>
+          <tr>
+            <td>&nbsp;</td>
+            <td>&nbsp;</td>
+          </tr>
+          <tr>
+            <td colspan="2"><div id="pixelslider"></div></td>
+            </tr>
+        </table>        
+        </div>
+		
+		<div data-bind="visible: viewModel.selectedPencil() == 'Neighbor'">
+		<br>
+        <table width="80%" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td><span class="tinyText">Tolerance:</span></td>
+            <td><input name="pixelTolerance" type="text" id="pixelTolerance" value="1" size="2" maxlength="2" onChange="globalSetter('pixelTolerance',this.value);" onClick="this.select();"></td>
+          </tr>
+          <tr>
+            <td>&nbsp;</td>
+            <td>&nbsp;</td>
+          </tr>
+          <tr>
+            <td colspan="2"><div id="pixelslidertolerance"></div></td>
+            </tr>
+        </table>        
+        </div>		
+		
+        <div id="pencilPalette" style="display:none"></div>
+		<div id="shadowPalette" style="display:none"></div></td>
+      </tr>
+    </table></td>
+  </tr>
+  <tr>
+    <td height="30" colspan="3" align="center" bgcolor="#3c3c3c"><div id="status"></div></td>
+  </tr>
+</table>
+</body>
+</html>

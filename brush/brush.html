@@ -1,0 +1,463 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Paint Tool 2017. Because... why not?</title>
+<script type="text/javascript" src="js/knockout-3.4.1.js"></script>
+<script type="text/javascript" src="js/tools.js"></script>
+<script type="text/javascript" src="js/brushes.js"></script>
+<script src="js/jquery-1.10.2.js"></script>
+<script src="js/jquery-ui.js"></script>
+<script>
+window.addEventListener('load', init, false);
+
+var isMousePressed = false;
+var globalX;
+var globalY;
+var lastPoint;
+var arrayofPoints = new Array();
+var x = 764;
+var y = 560;
+var counter = 0;
+var ctx;
+var initCanvasNumber = 3;
+var selectedLayer = 0;
+var eraserEnabled = false;
+
+var BB = new Array();
+var canvas = new Array();
+
+var pencilsModel = {};
+
+var currentDrawStyle = {
+	beginToDrawOnFirstClick: false,
+	putShadow: false,
+	LineColor: "#000000",
+	ShadowColor: "#666666",
+	pencilWidth: 5,
+	shadowWidth: 5,
+	shwdowOffset: 5,
+	pixelSeparation : 1,
+	pixelTolerance : 10,
+	joinWidth : 1
+}
+
+function setCurrentLayer(layer) {
+	ctx = canvas[layer].getContext("2d");
+}
+	
+function init() {
+	// Initialize Canvas
+	for (nc = 0; nc < initCanvasNumber; nc++) {
+		canvas[nc] = document.getElementById("myCanvas" + nc);
+		if (nc == 0) {setCurrentLayer(0);}
+		
+		BB[nc] = canvas[nc].getBoundingClientRect();
+		
+		canvas[nc].onmousedown = function(e) {
+			isMousePressed = true;
+			document.getElementById("status").innerHTML = "-mousedown-  -begindraw[" + currentDrawStyle.beginToDrawOnFirstClick + "]-";
+			
+			//globalX = e.clientX - canvas.offsetLeft;
+			//globalY = e.clientY - canvas.offsetTop;
+	
+			globalX = e.clientX - BB[selectedLayer].left;
+			globalY = e.clientY - BB[selectedLayer].top;
+					
+			ctx.beginPath();
+			//ctx.moveTo(globalX, globalY);
+			
+			lastPoint = { x: (globalX * 1), y: (globalY * 1) };
+			
+			arrayofPoints = new Array();
+			arrayofPoints.push({x:(globalX * 1),y:(globalY * 1)});
+			counter = 1;
+			
+			if (currentDrawStyle.beginToDrawOnFirstClick) {draw(ctx);}
+		}
+		
+		canvas[nc].onmouseup = function(e) {
+			// document.getElementById("status").innerHTML = "";
+			isMousePressed = false;
+			
+		}
+		
+		canvas[nc].onmousemove  = function(e) {
+			if (isMousePressed) {
+				//globalX = e.clientX - canvas.offsetLeft;
+				//globalY = e.clientY - canvas.offsetTop;
+				globalX = e.clientX - BB[selectedLayer].left;
+				globalY = e.clientY - BB[selectedLayer].top;
+		
+				draw(ctx);	
+			} else {
+				// document.getElementById("coords").innerHTML = "(" + (e.clientX + " - " + BB[selectedLayer].left) + "," + (e.clientY + " - " + BB[selectedLayer].top) + ")";
+			}
+		}
+	}
+	// Init other sections
+	$( "#pencilWidth" ).spinner({ min: 0, max: 200 }).val(5);
+	$( "#pencilWidth" ).on( "spinchange", function( event, ui ) {
+		globalSetter('pencilWidth', $( "#pencilWidth" ).spinner( "value" ));
+	} );
+	
+	$( "#shadowWidth" ).spinner({ min: 1, max: 200 }).val(5);
+	$( "#shadowWidth" ).on( "spinchange", function( event, ui ) {
+		globalSetter('shadowWidth', $( "#shadowWidth" ).spinner( "value" ));
+	} );	
+	$( "#shwdowOffset" ).spinner({ min: 1, max: 200 }).val(5);
+	$( "#shwdowOffset" ).on( "spinchange", function( event, ui ) {
+		globalSetter('shwdowOffset', $( "#shwdowOffset" ).spinner( "value" ));
+	} );	
+
+    $( "#pixelslider" ).slider();
+	$( "#pixelslider" ).slider( "option", "min", 0 );
+	$( "#pixelslider" ).slider( "option", "max", 50 );
+	$( "#pixelslider" ).on( "slide", function( event, ui ) {
+		var pixelSeparation = $( "#pixelslider" ).slider( "option", "value" );
+		document.getElementById("pixelSeparation").value = pixelSeparation;
+		globalSetter('pixelSeparation',pixelSeparation);
+	} );
+	
+    $( "#pixelslidertolerance" ).slider();
+	$( "#pixelslidertolerance" ).slider( "option", "min", 0 );
+	$( "#pixelslidertolerance" ).slider( "option", "max", 50 );
+	$( "#pixelslidertolerance" ).on( "slide", function( event, ui ) {
+		var pixelTolerance = $( "#pixelslidertolerance" ).slider( "option", "value" );
+		document.getElementById("pixelTolerance").value = pixelTolerance;
+		globalSetter('pixelTolerance',pixelTolerance);
+	} );
+	
+    $( "#joinsliderwidth" ).slider();
+	$( "#joinsliderwidth" ).slider( "option", "min", 0 );
+	$( "#joinsliderwidth" ).slider( "option", "max", 50 );
+	$( "#joinsliderwidth" ).on( "slide", function( event, ui ) {
+		var joinWidth = $( "#joinsliderwidth" ).slider( "option", "value" );
+		document.getElementById("joinWidth").value = joinWidth;
+		globalSetter('joinWidth',joinWidth);
+	} );	
+
+	// Knockout code --- first experiment * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+	
+	pencilsModel.pencilsArray = [
+		{ pencilPublicName: 'Neighbor', pencilName: 'Neighbor', firstClick: '1'}, 
+		{ pencilPublicName: 'Points', pencilName: 'Point', firstClick: '1'}, 
+		{ pencilPublicName: 'Line', pencilName: 'Line', firstClick: '0'}, 
+		{ pencilPublicName: 'Furry', pencilName: 'Fur', firstClick: '1'},
+		{ pencilPublicName: 'Flakes', pencilName: 'Flakes', firstClick: '0'},
+		{ pencilPublicName: 'Random Circles', pencilName: 'Circles', firstClick: '1'},
+		{ pencilPublicName: 'Brush Strokes', pencilName: 'Brushstroke', firstClick: '1'},
+		{ pencilPublicName: 'Random Triangles', pencilName: 'MagicBrush', firstClick: '0'},
+		{ pencilPublicName: 'Pixel Art', pencilName: 'BigPixel', firstClick: '1'}
+	];
+	
+	pencilsModel.selectedPencil = ko.observable(); // Stores AUTOMAGICALLY (Using KO) the selected value
+	// That happens because the value binding (in the select) links the associated DOM element’s value with a property on your view model.
+	// <select data-bind="options: pencilsArray, value: selectedPencil, optionsText: 'pencilPublicName'"></select>
+	
+	pencilsModel.selectedPencilValueClick = ko.computed(function () { 
+		return pencilsModel.selectedPencil() && pencilsModel.selectedPencil().firstClick; 
+	});
+	pencilsModel.selectedPencilValue = ko.computed(function () { 
+		return pencilsModel.selectedPencil() && pencilsModel.selectedPencil().pencilName; 
+	});
+	pencilsModel.selectedPencilText =  ko.computed(function () { 
+		return pencilsModel.selectedPencil() && pencilsModel.selectedPencil().pencilPublicName; 
+	});
+	
+	pencilsModel.smoothLine = ko.observable(true);
+	pencilsModel.drawShadow = ko.observable(true);
+	
+	pencilsModel.eraserEnabled = ko.observable(false);
+	
+	pencilsModel.eraserEnabled.subscribe(function(isChecked){
+        isChecked ? alert("Eraser Set") : ctx.globalCompositeOperation = "source-over";
+    }, this);
+
+	ko.applyBindings(pencilsModel);
+	
+	/*
+	// This is used for hiding or showing specific sections according to selectedPencil value
+    viewModel = {
+        selectedPencil : ko.observable("Neighbor")
+    };	
+	ko.applyBindings(viewModel);	
+	*/
+	// Knockout code --- first experiment * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+	
+	initPalette();
+}
+
+// Knockout code --- first experiment * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+
+// Knockout code --- first experiment * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+
+function initPalette() {
+	selectedPalette = document.getElementById("selectedPalette").value;
+	if ((selectedPalette == undefined) || (selectedPalette == "")) {selectedPalette = "standard";}
+	document.getElementById("pencilPalette").innerHTML = getPalette("LineColor",selectedPalette,"pencilPalette");
+	document.getElementById("shadowPalette").innerHTML = getPalette("ShadowColor",selectedPalette,"shadowPalette");
+}
+
+function draw(context) {
+	//selectedPencil = document.getElementById("pencil").value;
+	if (pencilsModel.selectedPencilValue() == "") {
+		return;	
+	}
+	
+	if (pencilsModel.drawShadow()) 
+	{
+		context.shadowOffsetX = currentDrawStyle.shwdowOffset;
+		context.shadowOffsetY = currentDrawStyle.shwdowOffset;
+		context.shadowBlur = currentDrawStyle.shadowWidth;
+		context.shadowColor = currentDrawStyle.ShadowColor;	
+	} else {
+		context.shadowOffsetX = 0;
+		context.shadowOffsetY = 0;
+		context.shadowBlur = 0;		
+	}
+	
+	/*
+	if ((currentDrawStyle.putShadow) || (document.getElementById("shadow").checked)) {setShadow(context);} else {
+		context.shadowOffsetX = 0;
+		context.shadowOffsetY = 0;
+		context.shadowBlur = 0;			
+	}
+	*/
+	
+	pencilsModel.selectedPencilValueClick() == 1 ? currentDrawStyle.beginToDrawOnFirstClick = true : currentDrawStyle.beginToDrawOnFirstClick = false;
+	myPencils[pencilsModel.selectedPencilValue()](context);
+}
+
+// Special Effects - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+/*
+function setShadowState() {
+	shadow = document.getElementById("shadow").checked;
+	shadow ? currentDrawStyle.putShadow = true : currentDrawStyle.putShadow = false;
+}
+*/
+
+// Inner HTML - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+function openPincelPalette() {
+	$( "#pencilPalette" ).dialog({
+		hide: { effect: "fadeOut", duration: 500 },
+		closeOnEscape: true,
+		maxHeight: 750,
+		maxWidth: 1024,
+		height: 480,
+		width: 640,
+		modal: true,
+		my: "left top",
+		at: "left top",
+		of: "#targetElement",
+		title: "Choose your color"
+	});
+}
+function openshadowPalette() {
+	$( "#shadowPalette" ).dialog({
+		hide: { effect: "fadeOut", duration: 500 },
+		closeOnEscape: true,
+		maxHeight: 750,
+		maxWidth: 1024,
+		height: 480,
+		width: 640,
+		modal: true,
+		my: "left top",
+		at: "left top",
+		of: "#targetElement",
+		title: "Choose your shadow color"
+	});
+}
+/*
+function setEraser() {
+	checked = document.getElementById("eraser").checked;
+	if (checked) {eraserEnabled = true;} else {eraserEnabled = false; ctx.globalCompositeOperation = "source-over";}
+	// Set to source-over because I do not why. If I dont put that, I cant restore to normal drawing after seting the eraser
+	document.getElementById("status").innerHTML = eraserEnabled;
+}
+*/
+// Layer Management - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+function setLayer(layer) {
+	selectedLayer = layer;
+	setCurrentLayer(layer);
+	for (nc = 0; nc < initCanvasNumber; nc++) {
+		if (nc != layer) {
+			document.getElementById("myCanvas" + nc).style.display = "none";
+		}
+	}
+	document.getElementById("myCanvas" + layer).style.display = "block";
+	
+	document.getElementById("eraser").checked = false;
+	document.getElementById("status").innerHTML = "LAYER [" + ((layer * 1) + 1) + "]";
+}
+function test() {
+	// ctx.clearRect(0, 0, 300, 300);	
+	for (nc = 0; nc < initCanvasNumber; nc++) {
+		document.getElementById("myCanvas" + nc).style.display = "block";
+	}	
+}
+</script>
+<link href="css/formatbody.css" rel="stylesheet" type="text/css">
+<link rel="stylesheet" href="css/jquery-ui.css">
+<style type="text/css">
+body {
+	background-color: #3c3c3c;
+}
+</style>
+</head>
+
+<body>
+<table width="99%" height="100%" border="0" align="center" cellpadding="1" cellspacing="1" bgcolor="#CCCCCC">
+  <tr>
+    <td height="50" colspan="3" bgcolor="#985E6D"><table width="100%" border="0" cellspacing="0" cellpadding="0">
+      <tr>
+        <td width="75" align="center"><img src="images/sponge.png" width="66" height="45"></td>
+        <td width="200"><strong><span class="normalText">Type:</span></strong>
+		
+		 <select data-bind="options: pencilsArray, value: selectedPencil, optionsText: 'pencilPublicName'"></select>
+	
+</td>
+        <td width="200"><strong><span class="normalText">Palette:</span></strong>
+        <select name="selectedPalette" id="selectedPalette" onChange="initPalette()">
+          <option value="standard">Flat Design</option>
+		  <option value="material">Material Design</option>
+          <option value="c64colors">c64</option>
+        </select>
+        </td>
+        <td>
+        <input name="Shadow" type="checkbox" id="shadow" data-bind="checked: drawShadow"> 
+        <strong><span class="normalText">Shadow</span></strong>
+        </td>
+        <td>&nbsp;</td>
+      </tr>
+    </table></td>
+  </tr>
+  <tr>
+    <td width="150" align="center" valign="top" bgcolor="#494E6B"><table width="100%" border="0" cellspacing="0" cellpadding="0">
+      <tr>
+        <td height="50" valign="top" bgcolor="#98878F"><table border="0" cellpadding="0" cellspacing="0" class="innerTable">
+          <tr>
+            <td width="73" height="50" bgcolor="#000000" onClick="openPincelPalette();" id="refLineColor">&nbsp;</td>
+            <td width="73" height="50" bgcolor="#666666" onClick="openshadowPalette();" id="refShadowColor">&nbsp;</td>
+          </tr>
+        </table></td>
+      </tr>
+      <tr>
+        <td valign="top"><table border="0" cellpadding="1" cellspacing="1" class="innerTable">
+          <tr>
+            <td width="120" class="tinyText">Pencil:</td>
+            <td><label for="pencilWidth"></label>
+              <input name="pencilWidth" style="width:30px; height:15px; font-size:12px;" type="text" id="pencilWidth" value="5" size="2" maxlength="2" onChange="globalSetter('pencilWidth',this.value);" onClick="this.select();"></td>
+          </tr>
+          <tr>
+            <td class="tinyText">Shadow:</td>
+            <td><label for="pencilWidth"></label>
+              <input name="pencilWidth" style="width:30px; height:15px; font-size:12px;" type="text" id="shadowWidth" value="5" size="2" maxlength="2" onChange="globalSetter('shadowWidth',this.value);" onClick="this.select();"></td>
+          </tr>
+          <tr>
+            <td class="tinyText">OffSet:</td>
+            <td><label for="pencilWidth"></label>
+              <input name="pencilWidth" style="width:30px; height:15px; font-size:12px;" type="text" id="shwdowOffset" value="5" size="2" maxlength="2" onChange="globalSetter('shwdowOffset',this.value);" onClick="this.select();"></td>
+          </tr>
+        </table></td>
+      </tr>
+      <tr>
+        <td valign="top"><table width="100%" border="0" cellpadding="0" cellspacing="0" class="innerTable">
+          <tr>
+            <td align="left"><select name="select2" size="1" id="select" onChange="setLayer(this.value);">
+              <option value="0">Layer 1</option>
+              <option value="1">Layer 2</option>
+              <option value="2">Layer 3</option>
+            </select></td>
+            <td align="left"><input type="button" name="button" id="button" value="SHOW ALL" onClick="test();"></td>
+          </tr>
+          <tr>
+            <td colspan="2" align="left"><input name="eraser" type="checkbox" id="eraser" data-bind="checked: eraserEnabled">
+              <label for="eraser" class="tinyText">ERASER</label></td>
+            </tr>
+        </table></td>
+      </tr>
+    </table></td>
+    <td width="950" valign="top" bgcolor="#FFFFFF">
+    <canvas id="myCanvas0" style="border: 1px solid; color:#ffffff; position: absolute; left: 152; top: 52; z-index: 2;" width="950" height="563"></canvas>
+    <canvas id="myCanvas1" style="border: 1px solid; color:#ffffff; position: absolute; left: 152; top: 52; z-index: 1;" width="950" height="563"></canvas>
+	<canvas id="myCanvas2" style="border: 1px solid; color:#ffffff; position: absolute; left: 152; top: 52; z-index: 0;" width="950" height="563"></canvas>    
+    </td>
+    <td valign="top" bgcolor="#3c3c3c"><table width="100%" border="0" class="innerTable">
+      <tr>
+        <td><span class="normalText">Experimental Paint Tool - Paris 2017</span></td>
+      </tr>
+      <tr>
+        <td align="center">
+		<b><p><span data-bind="text: selectedPencilText"></span></p></b>
+        <div id="coords"></div>
+        <div id="customConstrols1" style="display:none"></div>
+		
+		<div data-bind="visible: selectedPencilValue() == 'BigPixel'">
+		<br>
+        <table width="80%" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td width="50"><input name="pixelSeparation" type="text" id="pixelSeparation" value="1" size="2" maxlength="2" onChange="globalSetter('pixelSeparation',this.value);" onClick="this.select();"></td>
+            <td><span class="tinyText"> Pixel Separation</span></td>
+          </tr>
+          <tr>
+            <td>&nbsp;</td>
+            <td>&nbsp;</td>
+          </tr>
+          <tr>
+            <td colspan="2"><div id="pixelslider"></div></td>
+            </tr>
+        </table>        
+        </div>
+		
+		<div data-bind="visible: selectedPencilValue() == 'Neighbor'">
+		<br>
+        <table width="80%" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td width="50"><input name="pixelTolerance" type="text" id="pixelTolerance" value="1" size="2" maxlength="2" onChange="globalSetter('pixelTolerance',this.value);" onClick="this.select();"></td>
+            <td>Tolerance</td>
+          </tr>	  
+          <tr>
+            <td>&nbsp;</td>
+            <td>&nbsp;</td>
+          </tr>
+          <tr>
+            <td colspan="2"><div id="pixelslidertolerance"></div></td>
+            </tr>
+          <tr>
+            <td>&nbsp;</td>
+            <td>&nbsp;</td>
+          </tr>	
+          <tr>
+            <td width="50"><input name="joinWidth" type="text" id="joinWidth" value="1" size="2" maxlength="2" onChange="globalSetter('joinWidth',this.value);" onClick="this.select();"></td>
+            <td>Join Width</td>
+          </tr>		  
+          <tr>
+            <td>&nbsp;</td>
+            <td>&nbsp;</td>
+          </tr>		  
+          <tr>
+            <td colspan="2"><div id="joinsliderwidth"></div></td>
+            </tr>
+          <tr>
+            <td>&nbsp;</td>
+            <td>&nbsp;</td>
+          </tr>
+          <tr>
+            <td width="50"><input type="checkbox" value="cherry" data-bind="checked: smoothLine" /></td>
+            <td>Smooth Line</td>
+          </tr>				
+        </table>        
+        </div>		
+		
+        <div id="pencilPalette" style="display:none"></div>
+		<div id="shadowPalette" style="display:none"></div></td>
+      </tr>
+    </table></td>
+  </tr>
+  <tr>
+    <td height="30" colspan="3" align="center" bgcolor="#3c3c3c"><div id="status"></div></td>
+  </tr>
+</table>
+</body>
+</html>

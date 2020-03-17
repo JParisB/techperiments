@@ -1,0 +1,24 @@
+@charset "utf-8";
+/* CSS Document */
+*{
+padding : 0;
+margin : 0;
+}
+body{
+background-size : 100% auto;
+	font-family: Verdana, Geneva, sans-serif;
+	font-size: 12px;
+	color:#CCC;
+}
+.normalText {
+	font-size: 12px;
+	color: #FFF;
+}
+.tinyText {
+	font-size: 11px;
+	color: #FFF;
+}
+.innerTable {
+	padding : 0;
+	margin : 5;	
+}
